@@ -19,6 +19,7 @@
 
 # RStudio files
 .Rproj.user/
+solar_flare.Rproj
 
 # produced vignettes
 vignettes/*.html
@@ -37,3 +38,8 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+# Project files
+flare.data1
+flare.data2
+flare.names
