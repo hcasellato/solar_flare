@@ -12,6 +12,7 @@ if(!require(tidyverse))    install.packages("tidyverse",    repos = repo, depend
 if(!require(Boruta))       install.packages("Boruta",       repos = repo, dependencies = TRUE)
 if(!require(caret))        install.packages("caret",        repos = repo, dependencies = TRUE)
 if(!require(dplyr))        install.packages("dplyr",        repos = repo, dependencies = TRUE)
+if(!require(e1071))        install.packages("e1071",         repos = repo, dependencies = TRUE)
 if(!require(pROC))         install.packages("pROC",         repos = repo, dependencies = TRUE)
 
 library(randomForest)
@@ -20,6 +21,7 @@ library(tidyverse)
 library(Boruta)
 library(caret)
 library(dplyr)
+library(e1071)
 library(pROC)
 
 ### Data Preparation: ####################################################################
@@ -63,6 +65,21 @@ colnames <- c("class", "lss", "spotdist", "activity", "evol", "fac", "hc",
 
 final_test_set  <- read.table("flare.data1", sep = " ", skip = 1, col.names = colnames)
 root_train_set  <- read.table("flare.data2", sep = " ", skip = 1, col.names = colnames)
+
+final_test_set <- final_test_set %>% mutate(cclass = as.factor(cclass),
+                                            mclass = as.factor(mclass),
+                                            xclass = as.factor(xclass))
+
+root_train_set <- root_train_set %>% mutate(cclass = as.factor(cclass),
+                                            mclass = as.factor(mclass),
+                                            xclass = as.factor(xclass))
+
+# Binary data sets
+binary_test_set        <- final_test_set
+binary_test_set[11:13] <- ifelse(binary_test_set[11:13] == 0, 0, 1)
+
+binary_train_set        <- root_train_set
+binary_train_set[11:13] <- ifelse(root_train_set[11:13] == 0, 0, 1)
 
 rm(repo, url, colnames)
 
@@ -114,36 +131,18 @@ round(prop.table(table(root_train_set$area_ls)),2)
 # M-class flares 1030  29  3  2  1  0  1  0  0  1066
 # X-class flares 1061   4  1  0  0  0  0  0  0  1066
 
-### Testing: #############################################################################
-
 ## Data partitioning:
 set.seed(2021, sample.kind = "Rounding")
-index <- createDataPartition(root_train_set$cclass, times = 1, p = .15, list = FALSE)
+index <- createDataPartition(root_train_set$cclass, times = 1, p = .85, list = FALSE)
 
-ttrain_set <- root_train_set[-index,]
-ttest_set  <- root_train_set[index,]
+ttrain_set <- root_train_set[index,]
+ttest_set  <- root_train_set[-index,]
 
-## General variables
-ctrl <- trainControl(method = "cv", number = 5)
-grid <- data.frame(mtry = seq(10,300,1))
+bin_ttrain_set <- binary_train_set[index,]
+bin_ttest_set <- binary_test_set[-index,]
 
-## C-Class prediction
-# Random Forest
-set.seed(2021, sample.kind = "Rounding")
-ctrain_rf <- train(ttrain_set[,1:10],
-                   ttrain_set[,11],
-                   method = "rf",
-                   ntree = 50,
-                   trControl = ctrl,
-                   tuneGrid = grid,
-                   nSamp = 200)
-plot(ctrain_rf)
 
-set.seed(2021, sample.kind = "Rounding")
-cfit_rf <- randomForest(ttrain_set[,1:10], ttrain_set[,11],
-                        ntree = 900,
-                        minNode = train_rf$bestTune$mtry)
-cfit_rf
+### C-Class prediction ###################################################################
 
 # Variable importance with Boruta
 set.seed(2021, sample.kind = "Rounding")
@@ -151,7 +150,40 @@ cboruta <- Boruta(ttrain_set[,1:10],
                   ttrain_set[,11],
                   maxRuns = 300,
                   doTrace = 1)
-cboruta
+cimp <- c(cboruta$finalDecision == "Confirmed" | cboruta$finalDecision == "Tentative")
+
+## Random Forest
+set.seed(2021, sample.kind = "Rounding")
+ctrain_rf <- train(ttrain_set[,1:10],
+                   ttrain_set$cclass,
+                   method = "rf",
+                   ntree = 50,
+                   trControl = trainControl(method = "cv", number = 5),
+                   tuneGrid = data.frame(mtry = seq(10,300,1)),
+                   nSamp = 200)
+plot(ctrain_rf)
+
+set.seed(2021, sample.kind = "Rounding")
+cfit_rf <- randomForest(ttrain_set[,1:10][cimp],
+                        ttrain_set[,11],
+                        ntree = 50,
+                        minNode = ctrain_rf$bestTune$mtry)
+
+cm_rf <- confusionMatrix(predict(cfit_rf, ttest_set), ttest_set$cclass)
+
+## ?????????
+
+
+## ROC Prediction
+
+c_pred_prob <- predict(cfit_rf, ttest_set, type = "prob")
+roc_rf <- multiclass.roc(ttest_set$cclass, c_pred_prob[,1])
+
+
+
+
+
+
 
 
 
