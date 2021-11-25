@@ -1,1 +1,1 @@
-# solar_flare
+# Solar Flare Project
