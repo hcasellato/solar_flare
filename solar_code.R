@@ -1,6 +1,5 @@
 ### Code Summary: ########################################################################
-#
-#
+# This project's goal is to create an algorithm that predicts and classifies Solar Flares. 
 #
 ### Basic packages: ######################################################################
 repo <- "http://cran.us.r-project.org"
@@ -25,7 +24,6 @@ library(e1071)
 library(pROC)
 
 ### Data Preparation: ####################################################################
-
 setwd(getwd())
 url <- "https://archive.ics.uci.edu/ml/machine-learning-databases/solar-flare/"
 
@@ -66,20 +64,55 @@ colnames <- c("class", "lss", "spotdist", "activity", "evol", "fac", "hc",
 final_test_set  <- read.table("flare.data1", sep = " ", skip = 1, col.names = colnames)
 root_train_set  <- read.table("flare.data2", sep = " ", skip = 1, col.names = colnames)
 
-final_test_set <- final_test_set %>% mutate(cclass = as.factor(cclass),
-                                            mclass = as.factor(mclass),
-                                            xclass = as.factor(xclass))
+## Factorized data sets
+final_test_set <- final_test_set %>% mutate(class    = as.factor(class),
+                                            lss      = as.factor(lss),
+                                            spotdist = as.factor(spotdist),
+                                            cclass   = as.factor(cclass),
+                                            mclass   = as.factor(mclass),
+                                            xclass   = as.factor(xclass))
 
-root_train_set <- root_train_set %>% mutate(cclass = as.factor(cclass),
-                                            mclass = as.factor(mclass),
-                                            xclass = as.factor(xclass))
+root_train_set <- root_train_set %>% mutate(class    = as.factor(class),
+                                            lss      = as.factor(lss),
+                                            spotdist = as.factor(spotdist),
+                                            cclass   = as.factor(cclass),
+                                            mclass   = as.factor(mclass),
+                                            xclass   = as.factor(xclass))
 
-# Binary data sets
-binary_test_set        <- final_test_set
-binary_test_set[11:13] <- ifelse(binary_test_set[11:13] == 0, 0, 1)
+## Replacing [,1:3] from letters to numbers
+# Unfortunately I can't find a way to reduce the number of lines in this next chunk
+levels(final_test_set[,1]) <- 1:6
+levels(final_test_set[,2]) <- 1:6
+levels(final_test_set[,3]) <- 1:4
 
-binary_train_set        <- root_train_set
-binary_train_set[11:13] <- ifelse(root_train_set[11:13] == 0, 0, 1)
+levels(root_train_set[,1]) <- 1:6
+levels(root_train_set[,2]) <- 1:6
+levels(root_train_set[,3]) <- 1:4
+
+## Binary data sets
+# can't think a way to reduce this part either
+binary_test_set                <- final_test_set 
+levels(binary_test_set$cclass) <- c("0", "1", "1")
+levels(binary_test_set$mclass) <- c("0", "1", "1", "1")
+
+binary_train_set                <- root_train_set
+levels(binary_train_set$cclass) <- c("0", "1", "1", "1", "1", "1", "1", "1", "1")
+levels(binary_train_set$mclass) <- c("0", "1", "1", "1", "1", "1")
+levels(binary_train_set$xclass) <- c("0", "1", "1")
+
+binary_test_set <- final_test_set %>% mutate(class    = as.numeric(as.character(class)),
+                                             lss      = as.numeric(as.character(lss)),
+                                             spotdist = as.numeric(as.character(spotdist)),
+                                             cclass    = as.numeric(as.character(cclass)),
+                                             mclass    = as.numeric(as.character(mclass)),
+                                             xclass    = as.numeric(as.character(xclass)))
+
+binary_train_set <- binary_train_set %>% mutate(class    = as.numeric(as.character(class)),
+                                                lss      = as.numeric(as.character(lss)),
+                                                spotdist = as.numeric(as.character(spotdist)),
+                                                cclass    = as.numeric(as.character(cclass)),
+                                                mclass    = as.numeric(as.character(mclass)),
+                                                xclass    = as.numeric(as.character(xclass)))
 
 rm(repo, url, colnames)
 
@@ -131,6 +164,16 @@ round(prop.table(table(root_train_set$area_ls)),2)
 # M-class flares 1030  29  3  2  1  0  1  0  0  1066
 # X-class flares 1061   4  1  0  0  0  0  0  0  1066
 
+
+### C-Class prediction: ##################################################################
+## Data preparation: 
+# Removing single event of 8 C-Class flare:
+binary_train_set      <- binary_train_set[-which(root_train_set$cclass == "8"),]
+
+root_train_set        <- root_train_set[-which(root_train_set$cclass == "8"),]
+root_train_set$cclass <- droplevels(root_train_set$cclass)
+
+
 ## Data partitioning:
 set.seed(2021, sample.kind = "Rounding")
 index <- createDataPartition(root_train_set$cclass, times = 1, p = .85, list = FALSE)
@@ -138,13 +181,10 @@ index <- createDataPartition(root_train_set$cclass, times = 1, p = .85, list = F
 ttrain_set <- root_train_set[index,]
 ttest_set  <- root_train_set[-index,]
 
-bin_ttrain_set <- binary_train_set[index,]
-bin_ttest_set <- binary_test_set[-index,]
+bttrain_set <- binary_train_set[index,]
+bttest_set  <- binary_train_set[-index,]
 
-
-### C-Class prediction ###################################################################
-
-# Variable importance with Boruta
+## Variable importance with Boruta
 set.seed(2021, sample.kind = "Rounding")
 cboruta <- Boruta(ttrain_set[,1:10],
                   ttrain_set[,11],
@@ -161,7 +201,7 @@ ctrain_rf <- train(ttrain_set[,1:10],
                    trControl = trainControl(method = "cv", number = 5),
                    tuneGrid = data.frame(mtry = seq(10,300,1)),
                    nSamp = 200)
-plot(ctrain_rf)
+#plot(ctrain_rf)
 
 set.seed(2021, sample.kind = "Rounding")
 cfit_rf <- randomForest(ttrain_set[,1:10][cimp],
@@ -169,10 +209,16 @@ cfit_rf <- randomForest(ttrain_set[,1:10][cimp],
                         ntree = 50,
                         minNode = ctrain_rf$bestTune$mtry)
 
-cm_rf <- confusionMatrix(predict(cfit_rf, ttest_set), ttest_set$cclass)
+crf_acc <- confusionMatrix(predict(cfit_rf, ttest_set), ttest_set$cclass)$overall["Accuracy"]
 
-## ?????????
+## Logistic Regression
+set.seed(2021, sample.kind = "Rounding")
+cfit_log <- glm.fit(bttrain_set[,1:10][cimp],
+                    bttrain_set[,11])
 
+clog_acc <- confusionMatrix(caret::predict(cfit_log, bttest_set), bttest_set$cclass)$overall["Accuracy"]
+
+## Knn
 
 ## ROC Prediction
 
