@@ -164,7 +164,6 @@ round(prop.table(table(root_train_set$area_ls)),2)
 # M-class flares 1030  29  3  2  1  0  1  0  0  1066
 # X-class flares 1061   4  1  0  0  0  0  0  0  1066
 
-
 ### C-Class prediction: ##################################################################
 ## Data preparation: 
 # Removing single event of 8 C-Class flare:
@@ -210,6 +209,25 @@ cfit_rf <- randomForest(ttrain_set[,1:10][cimp],
 
 crf_cm <- confusionMatrix(predict(cfit_rf, ttest_set), ttest_set$cclass)
 
+## Random Forest for Binary data sets
+set.seed(2021, sample.kind = "Rounding")
+bctrain_rf <- train(bttrain_set[,1:10],
+                   bttrain_set$cclass,
+                   method = "rf",
+                   ntree = 50,
+                   trControl = trainControl(method = "cv", number = 5),
+                   tuneGrid = data.frame(mtry = seq(10,300,1)),
+                   nSamp = 200)
+
+set.seed(2021, sample.kind = "Rounding")
+bcfit_rf <- randomForest(bttrain_set[,1:10][cimp],
+                         as.factor(bttrain_set[,11]),
+                         ntree = 50,
+                         minNode = bctrain_rf$bestTune$mtry)
+
+bcrf_cm <- confusionMatrix(as.factor(ifelse(predict(bcfit_rf, bttest_set, type="prob")[,2] >= .45, 1, 0)),
+                           as.factor(bttest_set$cclass))
+
 ## Logistic Regression
 set.seed(2021, sample.kind = "Rounding")
 cfit_log <- glm(cclass ~ .,
@@ -240,28 +258,23 @@ cknn_cm <- confusionMatrix(c_knn_p, as.factor(bttest_set$cclass))
 # out that wasn't worth 100 more lines to predict pretty much the same output,
 # therefore this section could be worked in the future.
 
-## ROC Prediction
+## Accuracy table:
+c_acc_tbl <- data.frame(RF_Raw         = crf_cm$overall["Accuracy"],
+                        RF_Binary      = bcrf_cm$overall["Accuracy"],
+                        Log_Reg_Binary = clog_cm$overall["Accuracy"],
+                        KNN_Binary     = cknn_cm$overall["Accuracy"])
 
-c_pred_prob <- predict(cfit_rf, ttest_set, type = "prob")
-roc_rf <- multiclass.roc(ttest_set$cclass, c_pred_prob[,1])
+## ROC/AUC table:
+c_auc_tbl <- data.frame(RF_Binary      = roc(ifelse(predict(bcfit_rf, bttest_set, type="prob")[,2] >= .45, 1, 0),
+                                             bttest_set$cclass)$auc,
+                        Log_Reg_Binary = roc(ifelse(predict(cfit_log, bttest_set, type = "response") > .5, 1, 0),
+                                             bttest_set$cclass)$auc,
+                        KNN_Binary     = roc(ifelse(predict(cfit_knn, bttest_set, type="prob")[,2] >= .4, 1, 0),
+                                             bttest_set$cclass)$auc)
+## Veredict:
+# Random forest on the Binary data set has more accuracy and area_under_curve, therefore will be used
+# for predicting occurances of C-Class Solar Flares
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+### M-Class prediction: ##################################################################
 
 ##########################################################################################
