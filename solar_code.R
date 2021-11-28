@@ -201,7 +201,6 @@ ctrain_rf <- train(ttrain_set[,1:10],
                    trControl = trainControl(method = "cv", number = 5),
                    tuneGrid = data.frame(mtry = seq(10,300,1)),
                    nSamp = 200)
-#plot(ctrain_rf)
 
 set.seed(2021, sample.kind = "Rounding")
 cfit_rf <- randomForest(ttrain_set[,1:10][cimp],
@@ -209,16 +208,37 @@ cfit_rf <- randomForest(ttrain_set[,1:10][cimp],
                         ntree = 50,
                         minNode = ctrain_rf$bestTune$mtry)
 
-crf_acc <- confusionMatrix(predict(cfit_rf, ttest_set), ttest_set$cclass)$overall["Accuracy"]
+crf_cm <- confusionMatrix(predict(cfit_rf, ttest_set), ttest_set$cclass)
 
 ## Logistic Regression
 set.seed(2021, sample.kind = "Rounding")
-cfit_log <- glm.fit(bttrain_set[,1:10][cimp],
-                    bttrain_set[,11])
+cfit_log <- glm(cclass ~ .,
+                data = bttrain_set[,1:11][cimp],
+                family = "binomial")
 
-clog_acc <- confusionMatrix(caret::predict(cfit_log, bttest_set), bttest_set$cclass)$overall["Accuracy"]
+clog_cm <- confusionMatrix(as.factor(ifelse(predict(cfit_log, bttest_set, type = "response") > .5, 1, 0)),
+                            as.factor(bttest_set$cclass))
 
-## Knn
+## K-Nearest Neighbors
+set.seed(2021, sample.kind = "Rounding")
+ctrain_knn <- train(as.factor(cclass) ~ .,
+                    method = "knn",
+                    data = bttrain_set[,1:11],
+                    tuneGrid = data.frame(k = 10:100))
+
+cfit_knn <- knn3(as.factor(cclass) ~ .,
+                 data = bttrain_set[,1:11][cimp],
+                 k = ctrain_knn$bestTune)
+
+set.seed(2021, sample.kind = "Rounding")
+c_knn_p <- as.factor(ifelse(predict(cfit_knn, bttest_set)[,2] >= .4, 1, 0))
+cknn_cm <- confusionMatrix(c_knn_p, as.factor(bttest_set$cclass))
+
+## Positive Occurrence training with Random Forest Ensemble
+# I tried ensemble methods to predict the number of C-Class occurrences given
+# they could be detected but didn't work as expected. In other words, it turns
+# out that wasn't worth 100 more lines to predict pretty much the same output,
+# therefore this section could be worked in the future.
 
 ## ROC Prediction
 
