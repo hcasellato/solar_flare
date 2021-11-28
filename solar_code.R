@@ -1,7 +1,7 @@
-### Code Summary: ########################################################################
+### Code Summary: ###############################################################################################
 # This project's goal is to create an algorithm that predicts and classifies Solar Flares. 
 #
-### Basic packages: ######################################################################
+### Basic packages: #############################################################################################
 repo <- "http://cran.us.r-project.org"
 
 # Required packages:
@@ -23,7 +23,7 @@ library(dplyr)
 library(e1071)
 library(pROC)
 
-### Data Preparation: ####################################################################
+### Data Preparation: ###########################################################################################
 setwd(getwd())
 url <- "https://archive.ics.uci.edu/ml/machine-learning-databases/solar-flare/"
 
@@ -116,7 +116,7 @@ binary_train_set <- binary_train_set %>% mutate(class    = as.numeric(as.charact
 
 rm(repo, url, colnames)
 
-### Data Exploration: ####################################################################
+### Data Exploration: ###########################################################################################
 
 ## Class
 # E and F have significantly fewer occurrences
@@ -164,7 +164,7 @@ round(prop.table(table(root_train_set$area_ls)),2)
 # M-class flares 1030  29  3  2  1  0  1  0  0  1066
 # X-class flares 1061   4  1  0  0  0  0  0  0  1066
 
-### C-Class prediction: ##################################################################
+### C-Class prediction: #########################################################################################
 ## Data preparation: 
 # Removing single event of 8 C-Class flare:
 binary_train_set      <- binary_train_set[-which(root_train_set$cclass == "8"),]
@@ -271,10 +271,10 @@ c_auc_tbl <- data.frame(RF_Binary      = roc(ifelse(predict(bcfit_rf, bttest_set
                                              bttest_set$cclass)$auc,
                         KNN_Binary     = roc(ifelse(predict(cfit_knn, bttest_set, type="prob")[,2] >= .4, 1, 0),
                                              bttest_set$cclass)$auc)
-## Veredict:
+## Verdict:
 # Random forest on the Binary data set has more accuracy and area_under_curve, therefore will be used
-# for predicting occurances of C-Class Solar Flares
+# for predicting occurrences of C-Class Solar Flares
 
-### M-Class prediction: ##################################################################
+### M-Class prediction: #########################################################################################
 
-##########################################################################################
+#################################################################################################################
