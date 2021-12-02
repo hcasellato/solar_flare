@@ -100,12 +100,12 @@ levels(binary_train_set$cclass) <- c("0", "1", "1", "1", "1", "1", "1", "1", "1"
 levels(binary_train_set$mclass) <- c("0", "1", "1", "1", "1", "1")
 levels(binary_train_set$xclass) <- c("0", "1", "1")
 
-binary_test_set <- final_test_set %>% mutate(class    = as.numeric(as.character(class)),
-                                             lss      = as.numeric(as.character(lss)),
-                                             spotdist = as.numeric(as.character(spotdist)),
-                                             cclass    = as.numeric(as.character(cclass)),
-                                             mclass    = as.numeric(as.character(mclass)),
-                                             xclass    = as.numeric(as.character(xclass)))
+binary_test_set <- binary_test_set %>% mutate(class    = as.numeric(as.character(class)),
+                                              lss      = as.numeric(as.character(lss)),
+                                              spotdist = as.numeric(as.character(spotdist)),
+                                              cclass    = as.numeric(as.character(cclass)),
+                                              mclass    = as.numeric(as.character(mclass)),
+                                              xclass    = as.numeric(as.character(xclass)))
 
 binary_train_set <- binary_train_set %>% mutate(class    = as.numeric(as.character(class)),
                                                 lss      = as.numeric(as.character(lss)),
@@ -161,7 +161,7 @@ round(prop.table(table(root_train_set$area_ls)),2)
 # M-class flares 1030  29  3  2  1  0  1  0  0  1066
 # X-class flares 1061   4  1  0  0  0  0  0  0  1066
 
-### C-Class prediction: #########################################################################################
+### C-Class Prediction: #########################################################################################
 ## Removing single event of 8 C-Class flare:
 cbinary_train_set      <- binary_train_set[-which(root_train_set$cclass == "8"),]
 
@@ -275,7 +275,7 @@ rm(bcfit_rf, bcrf_cm, bctrain_rf, c_auc_tbl, c_acc_tbl, cbinary_train_set, cboru
    cfit_knn, cfit_log, cfit_rf, cknn_cm, clog_cm, crf_cm, croot_train_set, ctrain_knn, ctrain_rf, cttest_set,
    cttrain_set, c_knn_p, cimp)
 
-### M-Class prediction: #########################################################################################
+### M-Class Prediction: #########################################################################################
 ## Data partitioning:
 # There are only 3% of M-Class occurrences, therefore we will only use the binary data set for ML.
 set.seed(2021, sample.kind = "Rounding")
@@ -335,7 +335,7 @@ mfit_knn <- knn3(as.factor(mclass) ~ .,
                  k = mtrain_knn$bestTune)
 
 set.seed(2021, sample.kind = "Rounding")
-m_knn_p <- as.factor(ifelse(predict(mfit_knn, mbttest_set)[,2] >= .12, 1, 0))
+m_knn_p <- as.factor(ifelse(predict(mfit_knn, mbttest_set)[,2] >= .1, 1, 0))
 
 mknn_cm <- confusionMatrix(m_knn_p, as.factor(mbttest_set$mclass))
 
@@ -357,7 +357,7 @@ m_auc_tbl <- data.frame(RF_Binary      = roc(ifelse(predict(bmfit_rf, mbttest_se
 rm(bmfit_rf, bmrf_cm, bmtrain_rf, m_auc_tbl, m_acc_tbl, mboruta, mbttest_set, mbttrain_set,
    mfit_knn, mfit_log, mknn_cm, mlog_cm, mtrain_knn, m_knn_p, mimp, m_log_p)
 
-### X-Class prediction: #########################################################################################
+### X-Class Prediction: #########################################################################################
 ## Data partitioning:
 # There are less than 1% of X-Class occurrences, therefore we will only use the binary data set for ML.
 set.seed(2021, sample.kind = "Rounding")
@@ -375,7 +375,7 @@ xboruta <- Boruta(xbttrain_set[,1:10],
                   doTrace = 1)
 ximp <- c(xboruta$finalDecision == "Confirmed" | xboruta$finalDecision == "Tentative")
 
-## Random Forest for Binary data sets
+## Random Forest
 set.seed(2021, sample.kind = "Rounding")
 bxtrain_rf <- train(xbttrain_set[,1:10],
                     xbttrain_set$xclass,
@@ -440,5 +440,96 @@ x_auc_tbl <- data.frame(RF_Binary      = roc(ifelse(predict(bxfit_rf, xbttest_se
 
 rm(bxfit_rf, bxrf_cm, bxtrain_rf, x_auc_tbl, x_acc_tbl, xboruta, xbttest_set, xbttrain_set,
    xfit_knn, xfit_log, xknn_cm, xlog_cm, xtrain_knn, x_knn_p, ximp, x_log_p)
+### Final Class Prediction: #####################################################################################
+# All models worked better on the binary data sets, therefore they will be used.
+rm(root_train_set, final_test_set)
 
-#################################################################################################################
+## C-Class
+# Boruta
+set.seed(2021, sample.kind = "Rounding")
+cboruta <- Boruta(binary_train_set[,1:10],
+                  binary_train_set[,11],
+                  maxRuns = 300,
+                  doTrace = 1)
+cimp <- c(cboruta$finalDecision == "Confirmed" | cboruta$finalDecision == "Tentative")
+rm(cboruta)
+
+# Random Forest
+set.seed(2021, sample.kind = "Rounding")
+train_rf <- train(binary_train_set[,1:10],
+                  binary_train_set$cclass,
+                  method = "rf",
+                  ntree = 50,
+                  trControl = trainControl(method = "cv", number = 5),
+                  tuneGrid = data.frame(mtry = seq(10,300,1)),
+                  nSamp = 200)
+
+set.seed(2021, sample.kind = "Rounding")
+fit_rf <- randomForest(binary_train_set[,1:10][cimp],
+                       as.factor(binary_train_set[,11]),
+                       ntree = 50,
+                       minNode = train_rf$bestTune$mtry)
+
+c_pred <- as.factor(ifelse(predict(fit_rf, binary_test_set, type="prob")[,2] >= .45, 1, 0))
+#rm(train_rf, fit_rf)
+
+## M-Class
+# Boruta
+set.seed(2021, sample.kind = "Rounding")
+mboruta <- Boruta(binary_train_set[,1:10],
+                  binary_train_set[,12],
+                  maxRuns = 300,
+                  doTrace = 1)
+mimp <- c(mboruta$finalDecision == "Confirmed" | mboruta$finalDecision == "Tentative")
+rm(mboruta)
+
+# K-Nearest Neighbors
+set.seed(2021, sample.kind = "Rounding")
+train_knn <- train(as.factor(mclass) ~ .,
+                    method = "knn",
+                    data = binary_train_set[,c(1:10,12)],
+                    tuneGrid = data.frame(k = 10:100))
+
+fit_knn <- knn3(as.factor(mclass) ~ .,
+                 data = binary_train_set[,c(1:10,12)][mimp],
+                 k = train_knn$bestTune)
+
+set.seed(2021, sample.kind = "Rounding")
+m_pred <- as.factor(ifelse(predict(fit_knn, binary_test_set)[,2] >= .1, 1, 0))
+#rm(train_knn, fit_knn)
+
+## X-Class
+# Boruta
+set.seed(2021, sample.kind = "Rounding")
+xboruta <- Boruta(binary_train_set[,1:10],
+                  binary_train_set[,13],
+                  maxRuns = 300,
+                  doTrace = 1)
+ximp <- c(xboruta$finalDecision == "Confirmed" | xboruta$finalDecision == "Tentative")
+rm(xboruta)
+
+# Random Forest
+set.seed(2021, sample.kind = "Rounding")
+xtrain_rf <- train(binary_train_set[,1:10],
+                   binary_train_set$xclass,
+                   method = "rf",
+                   ntree = 50,
+                   trControl = trainControl(method = "cv", number = 5),
+                   tuneGrid = data.frame(mtry = seq(10,300,1)),
+                   nSamp = 200)
+
+set.seed(2021, sample.kind = "Rounding")
+xfit_rf <- randomForest(binary_train_set[,1:10][ximp],
+                        as.factor(binary_train_set[,12]),
+                        ntree = 50,
+                        minNode = xtrain_rf$bestTune$mtry)
+
+set.seed(2021, sample.kind = "Rounding")
+x_pred <- as.factor(ifelse(predict(xfit_rf, binary_test_set, type="prob")[,2] >= .45, 1, 0))
+#rm(xtrain_rf, xfit_rf)
+#rm(cimp, mimp, ximp)
+
+### Final Testing: ##############################################################################################
+acc_cclass <- confusionMatrix(c_pred, as.factor(binary_test_set$cclass))$overall["Accuracy"]
+acc_mclass <- confusionMatrix(m_pred, as.factor(binary_test_set$mclass))$overall["Accuracy"]
+acc_xclass <- confusionMatrix(x_pred, as.factor(binary_test_set$xclass))$overall["Accuracy"]
