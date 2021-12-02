@@ -113,11 +113,8 @@ binary_train_set <- binary_train_set %>% mutate(class    = as.numeric(as.charact
                                                 cclass    = as.numeric(as.character(cclass)),
                                                 mclass    = as.numeric(as.character(mclass)),
                                                 xclass    = as.numeric(as.character(xclass)))
-
 rm(repo, url, colnames)
-
 ### Data Exploration: ###########################################################################################
-
 ## Class
 # E and F have significantly fewer occurrences
 round(prop.table(table(root_train_set$class)),2)
@@ -165,36 +162,35 @@ round(prop.table(table(root_train_set$area_ls)),2)
 # X-class flares 1061   4  1  0  0  0  0  0  0  1066
 
 ### C-Class prediction: #########################################################################################
-## Data preparation: 
-# Removing single event of 8 C-Class flare:
-binary_train_set      <- binary_train_set[-which(root_train_set$cclass == "8"),]
+## Removing single event of 8 C-Class flare:
+cbinary_train_set      <- binary_train_set[-which(root_train_set$cclass == "8"),]
 
-root_train_set        <- root_train_set[-which(root_train_set$cclass == "8"),]
-root_train_set$cclass <- droplevels(root_train_set$cclass)
+croot_train_set        <- root_train_set[-which(root_train_set$cclass == "8"),]
+croot_train_set$cclass <- droplevels(croot_train_set$cclass)
 
-
-## Data partitioning:
+# Data partitioning:
 set.seed(2021, sample.kind = "Rounding")
-index <- createDataPartition(root_train_set$cclass, times = 1, p = .85, list = FALSE)
+cindex <- createDataPartition(croot_train_set$cclass, times = 1, p = .85, list = FALSE)
 
-ttrain_set <- root_train_set[index,]
-ttest_set  <- root_train_set[-index,]
+cttrain_set <- croot_train_set[cindex,]
+cttest_set  <- croot_train_set[-cindex,]
 
-bttrain_set <- binary_train_set[index,]
-bttest_set  <- binary_train_set[-index,]
+cbttrain_set <- cbinary_train_set[cindex,]
+cbttest_set  <- cbinary_train_set[-cindex,]
 
+rm(cindex)
 ## Variable importance with Boruta
 set.seed(2021, sample.kind = "Rounding")
-cboruta <- Boruta(ttrain_set[,1:10],
-                  ttrain_set[,11],
+cboruta <- Boruta(cttrain_set[,1:10],
+                  cttrain_set[,11],
                   maxRuns = 300,
                   doTrace = 1)
 cimp <- c(cboruta$finalDecision == "Confirmed" | cboruta$finalDecision == "Tentative")
 
 ## Random Forest
 set.seed(2021, sample.kind = "Rounding")
-ctrain_rf <- train(ttrain_set[,1:10],
-                   ttrain_set$cclass,
+ctrain_rf <- train(cttrain_set[,1:10],
+                   cttrain_set$cclass,
                    method = "rf",
                    ntree = 50,
                    trControl = trainControl(method = "cv", number = 5),
@@ -202,17 +198,17 @@ ctrain_rf <- train(ttrain_set[,1:10],
                    nSamp = 200)
 
 set.seed(2021, sample.kind = "Rounding")
-cfit_rf <- randomForest(ttrain_set[,1:10][cimp],
-                        ttrain_set[,11],
+cfit_rf <- randomForest(cttrain_set[,1:10][cimp],
+                        cttrain_set[,11],
                         ntree = 50,
                         minNode = ctrain_rf$bestTune$mtry)
 
-crf_cm <- confusionMatrix(predict(cfit_rf, ttest_set), ttest_set$cclass)
+crf_cm <- confusionMatrix(predict(cfit_rf, cttest_set), cttest_set$cclass)
 
 ## Random Forest for Binary data sets
 set.seed(2021, sample.kind = "Rounding")
-bctrain_rf <- train(bttrain_set[,1:10],
-                   bttrain_set$cclass,
+bctrain_rf <- train(cbttrain_set[,1:10],
+                   cbttrain_set$cclass,
                    method = "rf",
                    ntree = 50,
                    trControl = trainControl(method = "cv", number = 5),
@@ -220,37 +216,37 @@ bctrain_rf <- train(bttrain_set[,1:10],
                    nSamp = 200)
 
 set.seed(2021, sample.kind = "Rounding")
-bcfit_rf <- randomForest(bttrain_set[,1:10][cimp],
-                         as.factor(bttrain_set[,11]),
+bcfit_rf <- randomForest(cbttrain_set[,1:10][cimp],
+                         as.factor(cbttrain_set[,11]),
                          ntree = 50,
                          minNode = bctrain_rf$bestTune$mtry)
 
-bcrf_cm <- confusionMatrix(as.factor(ifelse(predict(bcfit_rf, bttest_set, type="prob")[,2] >= .45, 1, 0)),
-                           as.factor(bttest_set$cclass))
+bcrf_cm <- confusionMatrix(as.factor(ifelse(predict(bcfit_rf, cbttest_set, type="prob")[,2] >= .45, 1, 0)),
+                           as.factor(cbttest_set$cclass))
 
 ## Logistic Regression
 set.seed(2021, sample.kind = "Rounding")
 cfit_log <- glm(cclass ~ .,
-                data = bttrain_set[,1:11][cimp],
+                data = cbttrain_set[,1:11][cimp],
                 family = "binomial")
 
-clog_cm <- confusionMatrix(as.factor(ifelse(predict(cfit_log, bttest_set, type = "response") > .5, 1, 0)),
-                            as.factor(bttest_set$cclass))
+clog_cm <- confusionMatrix(as.factor(ifelse(predict(cfit_log, cbttest_set, type = "response") > .5, 1, 0)),
+                            as.factor(cbttest_set$cclass))
 
 ## K-Nearest Neighbors
 set.seed(2021, sample.kind = "Rounding")
 ctrain_knn <- train(as.factor(cclass) ~ .,
                     method = "knn",
-                    data = bttrain_set[,1:11],
+                    data = cbttrain_set[,1:11],
                     tuneGrid = data.frame(k = 10:100))
 
 cfit_knn <- knn3(as.factor(cclass) ~ .,
-                 data = bttrain_set[,1:11][cimp],
+                 data = cbttrain_set[,1:11][cimp],
                  k = ctrain_knn$bestTune)
 
 set.seed(2021, sample.kind = "Rounding")
-c_knn_p <- as.factor(ifelse(predict(cfit_knn, bttest_set)[,2] >= .4, 1, 0))
-cknn_cm <- confusionMatrix(c_knn_p, as.factor(bttest_set$cclass))
+c_knn_p <- as.factor(ifelse(predict(cfit_knn, cbttest_set)[,2] >= .4, 1, 0))
+cknn_cm <- confusionMatrix(c_knn_p, as.factor(cbttest_set$cclass))
 
 ## Positive Occurrence training with Random Forest Ensemble
 # I tried ensemble methods to predict the number of C-Class occurrences given
@@ -265,16 +261,184 @@ c_acc_tbl <- data.frame(RF_Raw         = crf_cm$overall["Accuracy"],
                         KNN_Binary     = cknn_cm$overall["Accuracy"])
 
 ## ROC/AUC table:
-c_auc_tbl <- data.frame(RF_Binary      = roc(ifelse(predict(bcfit_rf, bttest_set, type="prob")[,2] >= .45, 1, 0),
-                                             bttest_set$cclass)$auc,
-                        Log_Reg_Binary = roc(ifelse(predict(cfit_log, bttest_set, type = "response") > .5, 1, 0),
-                                             bttest_set$cclass)$auc,
-                        KNN_Binary     = roc(ifelse(predict(cfit_knn, bttest_set, type="prob")[,2] >= .4, 1, 0),
-                                             bttest_set$cclass)$auc)
+c_auc_tbl <- data.frame(RF_Binary      = roc(ifelse(predict(bcfit_rf, cbttest_set, type="prob")[,2] >= .45, 1, 0),
+                                             cbttest_set$cclass)$auc,
+                        Log_Reg_Binary = roc(ifelse(predict(cfit_log, cbttest_set, type = "response") > .5, 1, 0),
+                                             cbttest_set$cclass)$auc,
+                        KNN_Binary     = roc(ifelse(predict(cfit_knn, cbttest_set, type="prob")[,2] >= .4, 1, 0),
+                                             cbttest_set$cclass)$auc)
 ## Verdict:
 # Random forest on the Binary data set has more accuracy and area_under_curve, therefore will be used
-# for predicting occurrences of C-Class Solar Flares
+# to predict occurrences of C-Class Solar Flares.
+
+rm(bcfit_rf, bcrf_cm, bctrain_rf, c_auc_tbl, c_acc_tbl, cbinary_train_set, cboruta, cbttest_set, cbttrain_set,
+   cfit_knn, cfit_log, cfit_rf, cknn_cm, clog_cm, crf_cm, croot_train_set, ctrain_knn, ctrain_rf, cttest_set,
+   cttrain_set, c_knn_p, cimp)
 
 ### M-Class prediction: #########################################################################################
+## Data partitioning:
+# There are only 3% of M-Class occurrences, therefore we will only use the binary data set for ML.
+set.seed(2021, sample.kind = "Rounding")
+mindex <- createDataPartition(binary_train_set$mclass, times = 1, p = .85, list = FALSE)
+
+mbttrain_set <- binary_train_set[mindex,]
+mbttest_set  <- binary_train_set[-mindex,]
+
+rm(mindex)
+## Variable importance with Boruta
+set.seed(2021, sample.kind = "Rounding")
+mboruta <- Boruta(mbttrain_set[,1:10],
+                  mbttrain_set[,12],
+                  maxRuns = 300,
+                  doTrace = 1)
+mimp <- c(mboruta$finalDecision == "Confirmed" | mboruta$finalDecision == "Tentative")
+
+## Random Forest for Binary data sets
+set.seed(2021, sample.kind = "Rounding")
+bmtrain_rf <- train(mbttrain_set[,1:10],
+                    mbttrain_set$mclass,
+                    method = "rf",
+                    ntree = 50,
+                    trControl = trainControl(method = "cv", number = 5),
+                    tuneGrid = data.frame(mtry = seq(10,300,1)),
+                    nSamp = 200)
+
+set.seed(2021, sample.kind = "Rounding")
+bmfit_rf <- randomForest(mbttrain_set[,1:10][mimp],
+                         as.factor(mbttrain_set[,12]),
+                         ntree = 50,
+                         minNode = bmtrain_rf$bestTune$mtry)
+
+bmrf_cm <- confusionMatrix(as.factor(ifelse(predict(bmfit_rf, mbttest_set, type="prob")[,2] >= .45, 1, 0)),
+                           as.factor(mbttest_set$mclass))
+
+## Logistic Regression
+set.seed(2021, sample.kind = "Rounding")
+mfit_log <- glm(mclass ~ .,
+                data = mbttrain_set[,c(1:10,12)][mimp],
+                family = "binomial")
+
+set.seed(2021, sample.kind = "Rounding")
+m_log_p <- as.factor(ifelse(predict(mfit_log, mbttest_set, type = "response") > .3, 1, 0))
+
+mlog_cm <- confusionMatrix(m_log_p, as.factor(mbttest_set$mclass))
+
+## K-Nearest Neighbors
+set.seed(2021, sample.kind = "Rounding")
+mtrain_knn <- train(as.factor(mclass) ~ .,
+                    method = "knn",
+                    data = mbttrain_set[,c(1:10,12)],
+                    tuneGrid = data.frame(k = 10:100))
+
+mfit_knn <- knn3(as.factor(mclass) ~ .,
+                 data = mbttrain_set[,c(1:10,12)][mimp],
+                 k = mtrain_knn$bestTune)
+
+set.seed(2021, sample.kind = "Rounding")
+m_knn_p <- as.factor(ifelse(predict(mfit_knn, mbttest_set)[,2] >= .12, 1, 0))
+
+mknn_cm <- confusionMatrix(m_knn_p, as.factor(mbttest_set$mclass))
+
+## Accuracy table:
+m_acc_tbl <- data.frame(RF_Binary      = bmrf_cm$overall["Accuracy"],
+                        Log_Reg_Binary = mlog_cm$overall["Accuracy"],
+                        KNN_Binary     = mknn_cm$overall["Accuracy"])
+
+## ROC/AUC table:
+m_auc_tbl <- data.frame(RF_Binary      = roc(ifelse(predict(bmfit_rf, mbttest_set, type="prob")[,2] >= .45, 1, 0),
+                                             mbttest_set$mclass)$auc,
+                        Log_Reg_Binary = roc(m_log_p, mbttest_set$mclass)$auc,
+                        KNN_Binary     = roc(m_knn_p, mbttest_set$mclass)$auc)
+
+## Verdict:
+# K-nearest neighbors has more accuracy and area_under_curve, therefore will be used to predict occurrences of
+# M-Class Solar Flares.
+
+rm(bmfit_rf, bmrf_cm, bmtrain_rf, m_auc_tbl, m_acc_tbl, mboruta, mbttest_set, mbttrain_set,
+   mfit_knn, mfit_log, mknn_cm, mlog_cm, mtrain_knn, m_knn_p, mimp, m_log_p)
+
+### X-Class prediction: #########################################################################################
+## Data partitioning:
+# There are less than 1% of X-Class occurrences, therefore we will only use the binary data set for ML.
+set.seed(2021, sample.kind = "Rounding")
+xindex <- createDataPartition(binary_train_set$xclass, times = 1, p = .85, list = FALSE)
+
+xbttrain_set <- binary_train_set[xindex,]
+xbttest_set  <- binary_train_set[-xindex,]
+
+rm(xindex)
+## Variable importance with Boruta
+set.seed(2021, sample.kind = "Rounding")
+xboruta <- Boruta(xbttrain_set[,1:10],
+                  xbttrain_set[,12],
+                  maxRuns = 300,
+                  doTrace = 1)
+ximp <- c(xboruta$finalDecision == "Confirmed" | xboruta$finalDecision == "Tentative")
+
+## Random Forest for Binary data sets
+set.seed(2021, sample.kind = "Rounding")
+bxtrain_rf <- train(xbttrain_set[,1:10],
+                    xbttrain_set$xclass,
+                    method = "rf",
+                    ntree = 50,
+                    trControl = trainControl(method = "cv", number = 5),
+                    tuneGrid = data.frame(mtry = seq(10,300,1)),
+                    nSamp = 200)
+
+set.seed(2021, sample.kind = "Rounding")
+bxfit_rf <- randomForest(xbttrain_set[,1:10][ximp],
+                         as.factor(xbttrain_set[,12]),
+                         ntree = 50,
+                         minNode = bxtrain_rf$bestTune$mtry)
+
+bxrf_cm <- confusionMatrix(as.factor(ifelse(predict(bxfit_rf, xbttest_set, type="prob")[,2] >= .45, 1, 0)),
+                           as.factor(xbttest_set$xclass))
+
+## Logistic Regression
+set.seed(2021, sample.kind = "Rounding")
+xfit_log <- glm(xclass ~ .,
+                data = xbttrain_set[,c(1:10,13)][ximp],
+                family = "binomial")
+
+set.seed(2021, sample.kind = "Rounding")
+x_log_p <- as.factor(ifelse(predict(xfit_log, xbttest_set, type = "response") > .2, 1, 0))
+levels(x_log_p) <- as.factor(c(0,1))
+
+xlog_cm <- confusionMatrix(x_log_p, as.factor(xbttest_set$xclass))
+
+## K-Nearest Neighbors
+set.seed(2021, sample.kind = "Rounding")
+xtrain_knn <- train(as.factor(xclass) ~ .,
+                    method = "knn",
+                    data = xbttrain_set[,c(1:10,13)],
+                    tuneGrid = data.frame(k = 10:100))
+
+xfit_knn <- knn3(as.factor(xclass) ~ .,
+                 data = xbttrain_set[,c(1:10,13)][ximp],
+                 k = xtrain_knn$bestTune)
+
+set.seed(2021, sample.kind = "Rounding")
+x_knn_p <- as.factor(ifelse(predict(xfit_knn, xbttest_set)[,2] >= .03, 1, 0))
+levels(x_knn_p) <- as.factor(c(0,1))
+
+xknn_cm <- confusionMatrix(x_knn_p, as.factor(xbttest_set$mclass))
+
+## Accuracy table:
+x_acc_tbl <- data.frame(RF_Binary      = bxrf_cm$overall["Accuracy"],
+                        Log_Reg_Binary = xlog_cm$overall["Accuracy"],
+                        KNN_Binary     = xknn_cm$overall["Accuracy"])
+
+## ROC/AUC table:
+x_auc_tbl <- data.frame(RF_Binary      = roc(ifelse(predict(bxfit_rf, xbttest_set, type="prob")[,2] >= .45, 1, 0),
+                                             xbttest_set$xclass)$auc,
+                        Log_Reg_Binary = roc(x_log_p, xbttest_set$xclass)$auc,
+                        KNN_Binary     = roc(x_knn_p, xbttest_set$xclass)$auc)
+
+## Verdict:
+# Random forest has more accuracy and area_under_curve, therefore will be used to predict occurrences of X-Class
+# Solar Flares.
+
+rm(bxfit_rf, bxrf_cm, bxtrain_rf, x_auc_tbl, x_acc_tbl, xboruta, xbttest_set, xbttrain_set,
+   xfit_knn, xfit_log, xknn_cm, xlog_cm, xtrain_knn, x_knn_p, ximp, x_log_p)
 
 #################################################################################################################
